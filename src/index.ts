@@ -3,12 +3,24 @@ import { middlewareLogResponses } from "./middleware/middlewareLogResponses.js";
 import { middlewareMetricsInc } from "./middleware/middlewareMetricsInc.js";
 import { config } from "./config.js";
 import { z } from "zod";
+import { errorHandler } from "./middleware/error.js";
 
 const app = express();
 const port = 8080;
+// 1. Define your array of banned words
+const bannedWords = ["kerfuffle", "sharbert", "fornax"];
+
+// 2. Create a dynamic Regex pattern: /apple|banana|cherry/gi
+const bannedWordsRegex = new RegExp(bannedWords.join("|"), "gi");
 
 const bodyResSchema = z.object({
-  body: z.string().max(140, { message: "Chirp is too long" }),
+  body: z
+    .string()
+    .max(140, { message: "Chirp is too long" })
+    .transform((val) => {
+      // Replace all matching words with asterisks
+      return val.replace(bannedWordsRegex, "****");
+    }),
 });
 
 type bodyResType = z.infer<typeof bodyResSchema>;
@@ -18,18 +30,9 @@ app.use(middlewareLogResponses, express.json());
 app.use("/app", middlewareMetricsInc, express.static("./src/app"));
 
 app.post("/api/validate_chirp", (req: Request, res: Response) => {
-  try {
     const parsedBody: bodyResType = req.body;
-    bodyResSchema.parse(parsedBody);
-    return res.send({
-      valid: true,
-    });
-  } catch (error) {
-    res.status(400);
-    if (error instanceof z.ZodError)
-      return res.send({ error: error.issues[0].message });
-    if (error instanceof Error) return res.send({ error: error.message });
-  }
+    const cleanedBody = bodyResSchema.parse(parsedBody);
+    return res.send({cleanedBody: cleanedBody.body});
 });
 
 app.get("/api/healthz", (req: Request, res: Response) => {
@@ -61,5 +64,7 @@ app.post("/admin/reset", (req: Request, res: Response): Response => {
   });
   return res.send();
 });
+
+app.use(errorHandler);
 
 app.listen(port);
