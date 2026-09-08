@@ -13,34 +13,23 @@ const bodyResSchema = z.object({
 
 type bodyResType = z.infer<typeof bodyResSchema>;
 
+app.use(middlewareLogResponses, express.json());
+
 app.use("/app", middlewareMetricsInc, express.static("./src/app"));
 
-app.use(middlewareLogResponses);
-
 app.post("/api/validate_chirp", (req: Request, res: Response) => {
-  let body = ""; // 1. Initialize
-
-  // 2. Listen for data events
-  req.on("data", (chunk) => {
-    body += chunk;
-  });
-
-  // 3. Listen for end events
-  req.on("end", () => {
-    try {
-      const parsedBody: bodyResType = JSON.parse(body);
-      bodyResSchema.parse(parsedBody);
-      return res.send({
-        valid: true,
-      });
-    } catch (error) {
-      res.status(400);
-      if (error instanceof z.ZodError)
-        return res.send({ error: error.issues[0].message });
-      if (error instanceof Error)
-        return res.send({ error: error.message });
-    }
-  });
+  try {
+    const parsedBody: bodyResType = req.body;
+    bodyResSchema.parse(parsedBody);
+    return res.send({
+      valid: true,
+    });
+  } catch (error) {
+    res.status(400);
+    if (error instanceof z.ZodError)
+      return res.send({ error: error.issues[0].message });
+    if (error instanceof Error) return res.send({ error: error.message });
+  }
 });
 
 app.get("/api/healthz", (req: Request, res: Response) => {
