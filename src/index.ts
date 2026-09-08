@@ -1,11 +1,10 @@
 import express, { type Express, type Request, type Response } from "express";
-import { middlewareLogResponses } from "./middleware/middlewareLogResponses.js";
-import { middlewareMetricsInc } from "./middleware/middlewareMetricsInc.js";
 import { config } from "./config.js";
 import { z } from "zod";
-import { errorHandler } from "./middleware/error.js";
+import { errorHandler, middlewareLogResponses, middlewareMetricsInc } from "./api/middleware.js";
+import { badRequestError } from "./api/error.js";
 
-const app = express();
+const app: Express = express();
 const port = 8080;
 // 1. Define your array of banned words
 const bannedWords = ["kerfuffle", "sharbert", "fornax"];
@@ -31,8 +30,13 @@ app.use("/app", middlewareMetricsInc, express.static("./src/app"));
 
 app.post("/api/validate_chirp", (req: Request, res: Response) => {
     const parsedBody: bodyResType = req.body;
-    const cleanedBody = bodyResSchema.parse(parsedBody);
-    return res.send({cleanedBody: cleanedBody.body});
+try {
+      const cleanedBody = bodyResSchema.parse(parsedBody);
+      return res.send({ cleanedBody: cleanedBody.body });
+
+} catch (error) {
+throw new badRequestError("Chirp is too long. Max length is 140");
+}
 });
 
 app.get("/api/healthz", (req: Request, res: Response) => {
