@@ -1,15 +1,22 @@
 import express, { type Express, type Request, type Response } from "express";
 import { config } from "./config.js";
 import { z } from "zod";
-import { errorHandler, middlewareLogResponses, middlewareMetricsInc } from "./api/middleware.js";
+import {
+  errorHandler,
+  middlewareLogResponses,
+  middlewareMetricsInc,
+} from "./api/middleware.js";
 import { badRequestError } from "./api/error.js";
+import postgres from "postgres";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
+import { drizzle } from "drizzle-orm/postgres-js";
 
+const migrationClient = postgres(config.dbURL, { max: 1 });
+await migrate(drizzle(migrationClient), config.migrationConfig);
 const app: Express = express();
-const port = 8080;
-// 1. Define your array of banned words
+
 const bannedWords = ["kerfuffle", "sharbert", "fornax"];
 
-// 2. Create a dynamic Regex pattern: /apple|banana|cherry/gi
 const bannedWordsRegex = new RegExp(bannedWords.join("|"), "gi");
 
 const bodyResSchema = z.object({
@@ -29,14 +36,13 @@ app.use(middlewareLogResponses, express.json());
 app.use("/app", middlewareMetricsInc, express.static("./src/app"));
 
 app.post("/api/validate_chirp", (req: Request, res: Response) => {
-    const parsedBody: bodyResType = req.body;
-try {
-      const cleanedBody = bodyResSchema.parse(parsedBody);
-      return res.send({ cleanedBody: cleanedBody.body });
-
-} catch (error) {
-throw new badRequestError("Chirp is too long. Max length is 140");
-}
+  const parsedBody: bodyResType = req.body;
+  try {
+    const cleanedBody = bodyResSchema.parse(parsedBody);
+    return res.send({ cleanedBody: cleanedBody.body });
+  } catch (error) {
+    throw new badRequestError("Chirp is too long. Max length is 140");
+  }
 });
 
 app.get("/api/healthz", (req: Request, res: Response) => {
@@ -71,4 +77,4 @@ app.post("/admin/reset", (req: Request, res: Response): Response => {
 
 app.use(errorHandler);
 
-app.listen(port);
+app.listen(config.port);
