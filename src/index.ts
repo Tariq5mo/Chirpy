@@ -12,8 +12,9 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { handlerMetrics } from "./api/metrics.js";
 
-const migrationClient = postgres(config.dbURL, { max: 1 });
-await migrate(drizzle(migrationClient), config.migrationConfig);
+const migrationClient = postgres(config.db.url, { max: 1 });
+await migrate(drizzle(migrationClient), config.db.migrationConfig);
+
 const app: Express = express();
 
 const bannedWords = ["kerfuffle", "sharbert", "fornax"];
@@ -57,7 +58,7 @@ app.get("/api/healthz", (req: Request, res: Response) => {
 app.get("/admin/metrics", handlerMetrics);
 
 app.post("/admin/reset", (req: Request, res: Response): Response => {
-  config.fileserverHits = 0;
+  config.api.fileServerHits = 0;
   res.set({
     "Content-Type": "text/plain",
     charset: "utf-8",
@@ -67,4 +68,4 @@ app.post("/admin/reset", (req: Request, res: Response): Response => {
 
 app.use(errorHandler);
 
-app.listen(config.port);
+app.listen(config.api.port);

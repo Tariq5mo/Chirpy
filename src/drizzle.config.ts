@@ -3,11 +3,11 @@ import { MigrationConfig } from "drizzle-orm/migrator";
 import { config } from "./config.js";
 
 export default defineConfig({
+  dialect: "postgresql",
   schema: "./src/db/",
   out: "./src/db/migration",
-  dialect: "postgresql",
   dbCredentials: {
-    url: config.dbURL,
+    url: config.db.url,
   },
 });
 
