@@ -11,6 +11,8 @@ import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { handlerMetrics } from "./api/metrics.js";
+import { db } from "./db/index.js";
+import { users } from "./db/schema.js";
 
 const migrationClient = postgres(config.db.url, { max: 1 });
 await migrate(drizzle(migrationClient), config.db.migrationConfig);
@@ -37,6 +39,22 @@ app.use(middlewareLogResponses, express.json());
 
 app.use("/app", middlewareMetricsInc, express.static("./src/app"));
 
+app.post("/api/users", async (req: Request, res: Response) => {
+  const parsedBody: { email: string } = req.body;
+
+  try {
+    const [newUser] = await db
+      .insert(users)
+      .values({
+        email: parsedBody.email,
+      })
+      .returning();
+    return res.status(201).send(newUser);
+  } catch (error) {
+    throw new badRequestError("Invalid input");
+  }
+});
+
 app.post("/api/validate_chirp", (req: Request, res: Response) => {
   const parsedBody: bodyResType = req.body;
   try {
@@ -57,8 +75,9 @@ app.get("/api/healthz", (req: Request, res: Response) => {
 
 app.get("/admin/metrics", handlerMetrics);
 
-app.post("/admin/reset", (req: Request, res: Response): Response => {
-  config.api.fileServerHits = 0;
+app.post("/admin/reset", async (req: Request, res: Response) => {
+  if (config.api.platform !== "dev") return res.status(403).send()
+  await db.delete(users);
   res.set({
     "Content-Type": "text/plain",
     charset: "utf-8",
