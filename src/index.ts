@@ -10,6 +10,7 @@ import { badRequestError } from "./api/error.js";
 import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
+import { handlerMetrics } from "./api/metrics.js";
 
 const migrationClient = postgres(config.dbURL, { max: 1 });
 await migrate(drizzle(migrationClient), config.migrationConfig);
@@ -53,18 +54,7 @@ app.get("/api/healthz", (req: Request, res: Response) => {
   return res.send("OK");
 });
 
-app.get("/admin/metrics", (req: Request, res: Response): Response => {
-  res.set({
-    "Content-Type": "text/html",
-    charset: "utf-8",
-  });
-  return res.send(`<html>
-  <body>
-    <h1>Welcome, Chirpy Admin</h1>
-    <p>Chirpy has been visited ${config.fileserverHits} times!</p>
-  </body>
-</html>`);
-});
+app.get("/admin/metrics", handlerMetrics);
 
 app.post("/admin/reset", (req: Request, res: Response): Response => {
   config.fileserverHits = 0;
