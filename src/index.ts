@@ -6,13 +6,19 @@ import {
   middlewareLogResponses,
   middlewareMetricsInc,
 } from "./api/middleware.js";
-import { badRequestError } from "./api/error.js";
+import {
+  badRequestError,
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+} from "./api/error.js";
 import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { handlerMetrics } from "./api/metrics.js";
 import { db } from "./db/index.js";
 import {
+  chirps,
   InsertNewUserSchema,
   NewUser,
   refreshTokens,
@@ -28,6 +34,7 @@ import {
   validateJWT,
 } from "./api/auth.js";
 import { eq } from "drizzle-orm";
+import { upgradeUser } from "./db/queries/users.js";
 
 const migrationClient = postgres(config.db.url, { max: 1 });
 await migrate(drizzle(migrationClient), config.db.migrationConfig);
@@ -47,15 +54,14 @@ app.post("/api/users", async (req: Request, res: Response) => {
         email: parsedBody.email,
         hashedPassword: await hashPassword(parsedBody.password),
       })
-      .returning();
-    type NewUserClean = Omit<NewUser, "hashedPassword">;
-    const newUserClean: NewUserClean = {
-      id: newUser.id,
-      email: newUser.email,
-      createdAt: newUser.createdAt,
-      updatedAt: newUser.updatedAt,
-    };
-    return res.status(201).send(newUserClean);
+      .returning({
+        id: users.id,
+        email: users.email,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+        isChirpyRed: users.isChirpyRed,
+      });
+    return res.status(201).send(newUser);
   } catch (error) {
     throw new badRequestError("Invalid input");
   }
@@ -70,7 +76,7 @@ app.post("/api/login", async (req: Request, res: Response) => {
       .where(eq(users.email, parsedBody.email))
       .limit(1);
     if (!result) {
-      return res.status(401).send();
+      throw new badRequestError("Invalid input");
     }
     const valid = await checkPasswordHash(
       parsedBody.password,
@@ -101,6 +107,7 @@ app.post("/api/login", async (req: Request, res: Response) => {
         updatedAt: result.updatedAt,
         token: token,
         refreshToken: userRefreshToken.token,
+        isChirpyRed: result.isChirpyRed
       };
       return res.status(200).send(userInfo);
     } else return res.status(401).send();
@@ -110,50 +117,96 @@ app.post("/api/login", async (req: Request, res: Response) => {
 });
 
 app.post("/api/refresh", async (req: Request, res: Response) => {
-  try {
-    const refreshToken = getBearerToken(req);
-    let [userRefreshToken] = await db
-      .select()
-      .from(refreshTokens)
-      .where(eq(refreshTokens.token, refreshToken))
-      .limit(1);
-    if (
-      !userRefreshToken ||
-      userRefreshToken.revoked_at ||
-      new Date(userRefreshToken.expiresAt) < new Date()
-    )
-      return res.status(401).send({error: "error"});
-    const token = makeJWT(userRefreshToken.userId, 3600, config.api.jwtSecret);
-    return res.status(200).send({token: token});
-  } catch (error) {
-    if (error instanceof badRequestError) return res.status(400);
-    return res.status(500);
-  }
+  const refreshToken = getBearerToken(req);
+  let [userRefreshToken] = await db
+    .select()
+    .from(refreshTokens)
+    .where(eq(refreshTokens.token, refreshToken))
+    .limit(1);
+  if (
+    !userRefreshToken ||
+    userRefreshToken.revoked_at ||
+    new Date(userRefreshToken.expiresAt) < new Date()
+  )
+    throw new UnauthorizedError("Invalid payload");
+  const token = makeJWT(userRefreshToken.userId, 3600, config.api.jwtSecret);
+  return res.status(200).send({ token: token });
 });
 
 app.post("/api/revoke", async (req: Request, res: Response) => {
-  try {
-    const refreshToken = getBearerToken(req);
-    let [userRefreshToken] = await db
-      .select()
-      .from(refreshTokens)
-      .where(eq(refreshTokens.token, refreshToken))
-      .limit(1);
-    if (
-      !userRefreshToken ||
-      userRefreshToken.revoked_at ||
-      new Date(userRefreshToken.expiresAt) < new Date()
-    )
-      return res.status(401);
-    await db
-      .update(refreshTokens)
-      .set({ revoked_at: new Date() })
-      .where(eq(refreshTokens.token, refreshToken));
-    return res.status(204).send();
-  } catch (error) {
-    if (error instanceof badRequestError) return res.status(400);
-    return res.status(500);
-  }
+  const refreshToken = getBearerToken(req);
+  let [userRefreshToken] = await db
+    .select()
+    .from(refreshTokens)
+    .where(eq(refreshTokens.token, refreshToken))
+    .limit(1);
+  if (
+    !userRefreshToken ||
+    userRefreshToken.revoked_at ||
+    new Date(userRefreshToken.expiresAt) < new Date()
+  )
+    throw new UnauthorizedError("Unauthorized");
+  await db
+    .update(refreshTokens)
+    .set({ revoked_at: new Date() })
+    .where(eq(refreshTokens.token, refreshToken));
+  return res.status(204).send();
+});
+
+app.put("/api/users", async (req: Request, res: Response) => {
+  const accessToken = getBearerToken(req);
+  if (!req.body.email || !req.body.password)
+    throw new badRequestError("email and password must be exits");
+  const userId = validateJWT(accessToken, config.api.jwtSecret);
+  if (!userId) throw new UnauthorizedError("Not valid");
+  const hashedPass = await hashPassword(req.body.password);
+  const [updatedUser] = await db
+    .update(users)
+    .set({ hashedPassword: hashedPass, email: req.body.email })
+    .where(eq(users.id, userId))
+    .returning({
+      id: users.id,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+      email: users.email,
+      isChirpyRed: users.isChirpyRed,
+    });
+  return res.status(200).send(updatedUser);
+});
+
+app.delete("/api/chirps/:chirpId", async (req: Request, res: Response) => {
+  const accessToken = getBearerToken(req);
+
+  const userId = validateJWT(accessToken, config.api.jwtSecret);
+  if (!userId) throw new ForbiddenError("Forbidden");
+  const chirpId = req.params.chirpId;
+  const [chirp] = await db
+    .select()
+    .from(chirps)
+    .where(eq(chirps.id, Array.isArray(chirpId) ? chirpId[0] : chirpId))
+    .limit(1);
+  if (!chirp) throw new NotFoundError("Not Found");
+
+  if (chirp.userId !== userId) throw new ForbiddenError("Forbidden");
+
+  await db
+    .delete(chirps)
+    .where(eq(chirps.id, Array.isArray(chirpId) ? chirpId[0] : chirpId));
+  return res.status(204).send();
+});
+
+app.post("/api/polka/webhooks", async (req: Request, res: Response) => {
+  type webhookData = {
+    event: string;
+    data: {
+      userId: string;
+    };
+  };
+  const parsedBody: webhookData = req.body;
+  if (parsedBody.event !== "user.upgraded") return res.status(204).send();
+  const user = await upgradeUser(parsedBody.data.userId);
+  if (!user) throw new NotFoundError("Not Found");
+  return res.status(204).send();
 });
 
 app.post("/api/chirps", createChirp);
