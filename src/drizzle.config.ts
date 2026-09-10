@@ -5,7 +5,7 @@ import { config } from "./config.js";
 export default defineConfig({
   dialect: "postgresql",
   schema: "./src/db/",
-  out: "./src/db/migration",
+  out: "./src/db/migrations",
   dbCredentials: {
     url: config.db.url,
   },
