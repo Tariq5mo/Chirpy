@@ -2,6 +2,8 @@ import { hash, verify } from "argon2";
 import { Request } from "express";
 import jwt from "jsonwebtoken";
 import type { JwtPayload } from "jsonwebtoken";
+import {randomBytes} from "node:crypto";
+import { badRequestError } from "./error.js";
 
 type payload = Pick<JwtPayload, "iss" | "sub" | "iat" | "exp">;
 
@@ -50,6 +52,10 @@ export function getBearerToken(req: {
 }): string {
   const authHead = req.get("Authorization");
   if (!authHead)
-    throw new Error("Invalid Request")
+    throw new badRequestError("Invalid Request")
   return authHead.replace(/^Bearer\s+/i, "").trim();
+}
+
+export function makeRefreshToken(): string {
+  return randomBytes(32).toString("hex");
 }
