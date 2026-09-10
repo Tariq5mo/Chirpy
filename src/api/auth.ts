@@ -50,7 +50,17 @@ export function getBearerToken(req: {
 }): string {
   const authHead = req.get("Authorization");
   if (!authHead) throw new UnauthorizedError("Unauthorized Request");
-  return authHead.replace(/^Bearer\s+/i, "").trim();
+  return authHead
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+}
+
+export function getAPIKey(req: Request) {
+  const authHead = req.get("Authorization");
+  if (!authHead) throw new UnauthorizedError("Unauthorized Request");
+  return authHead
+    .replace(/^ApiKey\s+/i, "")
+    .trim();
 }
 
 export function makeRefreshToken(): string {
