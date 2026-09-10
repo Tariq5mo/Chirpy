@@ -2,8 +2,8 @@ import { hash, verify } from "argon2";
 import { Request } from "express";
 import jwt from "jsonwebtoken";
 import type { JwtPayload } from "jsonwebtoken";
-import {randomBytes} from "node:crypto";
-import { badRequestError } from "./error.js";
+import { randomBytes } from "node:crypto";
+import { badRequestError, UnauthorizedError } from "./error.js";
 
 type payload = Pick<JwtPayload, "iss" | "sub" | "iat" | "exp">;
 
@@ -37,22 +37,19 @@ export function validateJWT(tokenString: string, secret: string): string {
   try {
     const decoded = jwt.verify(tokenString, secret);
     if (typeof decoded === "string" || !decoded.sub) {
-      throw new Error("Invalid payload");
+      throw new UnauthorizedError("Invalid payload");
     }
-    return decoded.sub
+    return decoded.sub;
   } catch (error) {
-    if (error instanceof Error) throw new Error(error.message);
+    throw new UnauthorizedError("Invalid payload");
   }
-  throw new Error("Invalid JWT");
 }
-
 
 export function getBearerToken(req: {
   get(name: string): string | undefined;
 }): string {
   const authHead = req.get("Authorization");
-  if (!authHead)
-    throw new badRequestError("Invalid Request")
+  if (!authHead) throw new UnauthorizedError("Unauthorized Request");
   return authHead.replace(/^Bearer\s+/i, "").trim();
 }
 
