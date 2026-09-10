@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { badRequestError } from "../../api/error.js";
+import { UnauthorizedError, badRequestError } from "../../api/error.js";
 import { db } from "../index.js";
 import { chirps, InsertNewChirpSchema, Newchirp } from "../schema.js";
 import { eq } from "drizzle-orm";
@@ -20,7 +20,7 @@ export async function createChirp(req: Request, res: Response) {
       .returning();
     return res.status(201).send(newChirp);
   } catch (error) {
-    throw new badRequestError(`Invalid input ${error}`);
+    throw new UnauthorizedError(`Invalid input ${error}`);
   }
 }
 
