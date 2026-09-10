@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, timestamp, varchar, uuid } from "drizzle-orm/pg-core";
+import { pgTable, timestamp, varchar, uuid, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -12,6 +12,7 @@ export const users = pgTable("users", {
     .$onUpdate(() => new Date()),
   email: varchar("email", { length: 256 }).unique().notNull(),
   hashedPassword: varchar("hashed_password").notNull(),
+  isChirpyRed: boolean("is_chirpy_red").default(false),
 });
 
 export const chirps = pgTable("chirps", {
