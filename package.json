@@ -8,10 +8,10 @@
     "build": "npx tsc",
     "start": "node dist/index.js",
     "dev": "npx tsc && node dist/index.js",
-    "generate": "drizzle-kit generate",
-    "migrate": "drizzle-kit migrate"
-}
-  ,
+    "generate": "drizzle-kit generate --config=src/drizzle.config.ts",
+    "migrate": "drizzle-kit migrate --config=src/drizzle.config.ts",
+    "test": "vitest --run"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Tariq5mo/Chirpy.git"
@@ -25,13 +25,19 @@
   "homepage": "https://github.com/Tariq5mo/Chirpy#readme",
   "devDependencies": {
     "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.4.1",
     "drizzle-kit": "^0.31.10",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^3.2.7"
   },
   "dependencies": {
+    "argon2": "^0.45.1",
+    "cross-env": "^10.1.0",
     "drizzle-orm": "^0.45.2",
+    "drizzle-zod": "^0.8.3",
     "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
     "postgres": "^3.4.9"
   }
 }
