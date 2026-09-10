@@ -15,10 +15,18 @@ import { db } from "./db/index.js";
 import {
   InsertNewUserSchema,
   NewUser,
+  refreshTokens,
   users,
 } from "./db/schema.js";
 import { createChirp, getAllChirps, getOneChirp } from "./db/queries/chirps.js";
-import { checkPasswordHash, getBearerToken, hashPassword, makeJWT, validateJWT } from "./api/auth.js";
+import {
+  checkPasswordHash,
+  getBearerToken,
+  hashPassword,
+  makeJWT,
+  makeRefreshToken,
+  validateJWT,
+} from "./api/auth.js";
 import { eq } from "drizzle-orm";
 
 const migrationClient = postgres(config.db.url, { max: 1 });
@@ -69,19 +77,82 @@ app.post("/api/login", async (req: Request, res: Response) => {
       result.hashedPassword,
     );
     if (valid) {
-      const token = makeJWT(result.id, parsedBody.expiresInSeconds && Number(parsedBody.expiresInSeconds) < 3600 ? Number(parsedBody.expiresInSeconds) : 3600, config.api.jwtSecret)
+      const token = makeJWT(result.id, 3600, config.api.jwtSecret);
+      let [userRefreshToken] = await db
+        .select()
+        .from(refreshTokens)
+        .where(eq(refreshTokens.userId, result.id))
+        .limit(1);
+      if (!userRefreshToken) {
+        const [newRefreshToken] = await db
+          .insert(refreshTokens)
+          .values({
+            token: makeRefreshToken(),
+            userId: result.id,
+          })
+          .returning();
+        userRefreshToken = newRefreshToken;
+      }
 
-      const newUserClean = {
+      const userInfo = {
         id: result.id,
         email: result.email,
         createdAt: result.createdAt,
         updatedAt: result.updatedAt,
-        token: token
+        token: token,
+        refreshToken: userRefreshToken.token,
       };
-      return res.status(200).send(newUserClean);
+      return res.status(200).send(userInfo);
     } else return res.status(401).send();
   } catch (error) {
     throw new badRequestError("Invalid input");
+  }
+});
+
+app.post("/api/refresh", async (req: Request, res: Response) => {
+  try {
+    const refreshToken = getBearerToken(req);
+    let [userRefreshToken] = await db
+      .select()
+      .from(refreshTokens)
+      .where(eq(refreshTokens.token, refreshToken))
+      .limit(1);
+    if (
+      !userRefreshToken ||
+      userRefreshToken.revoked_at ||
+      new Date(userRefreshToken.expiresAt) < new Date()
+    )
+      return res.status(401).send({error: "error"});
+    const token = makeJWT(userRefreshToken.userId, 3600, config.api.jwtSecret);
+    return res.status(200).send({token: token});
+  } catch (error) {
+    if (error instanceof badRequestError) return res.status(400);
+    return res.status(500);
+  }
+});
+
+app.post("/api/revoke", async (req: Request, res: Response) => {
+  try {
+    const refreshToken = getBearerToken(req);
+    let [userRefreshToken] = await db
+      .select()
+      .from(refreshTokens)
+      .where(eq(refreshTokens.token, refreshToken))
+      .limit(1);
+    if (
+      !userRefreshToken ||
+      userRefreshToken.revoked_at ||
+      new Date(userRefreshToken.expiresAt) < new Date()
+    )
+      return res.status(401);
+    await db
+      .update(refreshTokens)
+      .set({ revoked_at: new Date() })
+      .where(eq(refreshTokens.token, refreshToken));
+    return res.status(204).send();
+  } catch (error) {
+    if (error instanceof badRequestError) return res.status(400);
+    return res.status(500);
   }
 });
 
