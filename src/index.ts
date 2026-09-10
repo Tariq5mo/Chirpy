@@ -27,6 +27,7 @@ import {
 import { createChirp, getAllChirps, getOneChirp } from "./db/queries/chirps.js";
 import {
   checkPasswordHash,
+  getAPIKey,
   getBearerToken,
   hashPassword,
   makeJWT,
@@ -196,6 +197,9 @@ app.delete("/api/chirps/:chirpId", async (req: Request, res: Response) => {
 });
 
 app.post("/api/polka/webhooks", async (req: Request, res: Response) => {
+  const key = getAPIKey(req);
+  if (key !== config.api.polkaKey)
+    throw new UnauthorizedError("Unauthorized");
   type webhookData = {
     event: string;
     data: {
